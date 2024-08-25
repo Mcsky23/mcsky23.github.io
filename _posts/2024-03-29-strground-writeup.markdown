@@ -7,7 +7,7 @@ description: "Interesting heap exploitation trick to bypass incorrect fastbin in
 ---
 
 ### Summary
-Strground is a heap exploitation challenge made by one of my colleagues from [**The Few Chosen**](https://ctftime.org/team/140885/). 
+Strground is a heap exploitation challenge made by Luma, one of my colleagues from [**The Few Chosen**](https://ctftime.org/team/140885/). 
 
 The challenge itself wasn't hard, but it involved a trick that I didn't know of. After reading numerous random writeups I figured the trick was to craft a chunk over `main_arena` and overwrite `top_chunk` pointer to get a chunk over `malloc_hook`.
 

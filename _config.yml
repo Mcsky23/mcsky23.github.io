@@ -18,8 +18,9 @@ iconURL: /img/pfp-2.png
 email: vladseba@mcsky.ro
 description: >- # this means to ignore newlines until "baseurl:"
   Mcblog
-baseurl: "" # the subpath of your site, e.g. /blog
-url: "" # the base hostname & protocol for your site, e.g. http://example.com
+baseurl: "/" # the subpath of your site, e.g. /blog
+domain: blog.mcsky.ro
+url: "https://blog.mcsky.ro" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: Mcsky231
 github_username:  Mcsky23
 
@@ -28,15 +29,22 @@ markdown: kramdown
 theme: jekyll-theme-leaf
 plugins:
   - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
 
 defaults:
   - scope:
       path: "img"
     values:
       image: true
+      sitemap: false
 
 hyvor_talk_website_id: 10812
+google_analytics: G-JTY61S9N3E
 
+jekyll_analytics:
+  GoogleAnalytics:          # Add, if you want to track with Google Analytics
+    id: G-JTY61S9N3E          # Required - replace with your tracking id
 # Exclude from processing.
 # The following items will not be processed, by default. Create a custom list
 # to override the default setting.
