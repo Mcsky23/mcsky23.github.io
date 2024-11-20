@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Meet tobi: a CLI tool designed to ease your CTF life"
-date:   2024-03-29 15:17:43 +0000
+date:   2024-11-20 22:17:43 +0000
 categories: news
 description: "Organize your CTF workflow with tobi by letting it handle your workspace setup!"
 ---
