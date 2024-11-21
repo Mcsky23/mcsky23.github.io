@@ -59,7 +59,7 @@ A `context` can either be a `CTF` or a `challenge` from a CTF.
 
 **Want to create a new challenge?**(and also switch context to it)
 
-`tobi new challenge <category> <chall_name>`
+`tobi new <category> <chall_name>`
 
 **Pwned a challenge?** It's time to run:
 
