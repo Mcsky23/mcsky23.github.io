@@ -1,12 +1,10 @@
 ---
 layout: post
 title:  "Cryptohack - Let's Decrypt Again"
-date:   2024-12-21 11:00:00 +0000
+date:   2030-12-21 11:00:00 +0000
 categories: writeups
 description: "Using discrete logarithms to forge signatures by crafting custom decryption exponents."
 ---
-
-# Cryptohack - Let's Decrypt Again
 
 **Note**: I am in no way a math expert so feel free to correct me if I make any theoretical mistakes in this post. This writeup has the role of documenting my cryptography learning process. Maybe you can learn something from it too.
 
@@ -246,4 +244,3 @@ This was a fun challenge and a neat opportunity to research about `Pohlig-Hellma
 ### Exercice for the reader
 
 How would you defend this scheme against the attack I just described?
-_
