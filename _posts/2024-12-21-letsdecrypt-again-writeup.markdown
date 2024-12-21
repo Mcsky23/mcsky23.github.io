@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Cryptohack - Let's Decrypt Again"
-date:   2030-12-21 11:00:00 +0000
+date:   2024-12-21 11:00:00 +0000
 categories: writeups
 description: "Using discrete logarithms to forge signatures by crafting custom decryption exponents."
 ---
@@ -38,25 +38,25 @@ elif your_input['option'] == 'get_signature':
 ```
 - we can set a public key that will be used to verify the signatures. There is a catch however. A random, unguessable, suffix will be generated that will need to be appended to the message we try to verify. 
     - **Why is this measure implemented?**
-    If there were no random suffix, we could simply set `e = 1` and `n = server_signature - custom_msg_digest`. See the problem? $server\_signature^{1} \equiv custom\_msg\_digest \mod N$. 
+    If there were no random suffix, we could simply set `e = 1` and `n = server_signature - custom_msg_digest`. See the problem? $$server\_signature^{1} \equiv custom\_msg\_digest \mod N$$. 
     This would allow us to forge any signature we want. This is in fact the idea behind `Let's Decrypt`, also from `Cryptohack`.
 
 - last, but not least, we can "claim" a message, that is, we can provide a message, a public exponent and an index(will talk about this later) and the server will check if: 
-    - $hash(msg) = signature^{e} \mod N$. In other words, it will check if our message's signature is the same as the server's signature.
+    - $$hash(msg) = signature^{e} \mod N$$. In other words, it will check if our message's signature is the same as the server's signature.
 
 **But what is the goal?** Earlier, I said that we can provide an index when claiming a message. When the challenge starts, the server 3 byte strings of length `len(FLAG)` in the following way:
 
-$shares[0] = random\_bytes(len(FLAG))$
+$$shares[0] = random\_bytes(len(FLAG))$$
 
-$shares[1] = random\_bytes(len(FLAG))$
+$$shares[1] = random\_bytes(len(FLAG))$$
 
-$shares[2] = shares[0] \oplus shares[1] \oplus FLAG$
+$$shares[2] = shares[0] \oplus shares[1] \oplus FLAG$$
 
 Recovering all 3 shares will allow us to recover the flag. The server leaks these shares if we manage to forge signatures for messages that match the following patterns:
 ```python
 PATTERNS = [
-    re.compile(r"^This is a test(.*)for a fake signature.$").match,
-    re.compile(r"^My name is ([a-zA-Z\s]+) and I own CryptoHack.org$").match,
+    re.compile(r"^This is a test(.*)for a fake signature.$$").match,
+    re.compile(r"^My name is ([a-zA-Z\s]+) and I own CryptoHack.org$$").match,
     btc_check
 ]
 ```
@@ -77,16 +77,16 @@ Cool, now let's get to forging.
 
 Firstly, let's make it clear what we want to achieve. We control the RSA **modulus**, but we can only pick it once. We also control the **public exponent** for every message we claim. So let's rephrase the problem.
 
-<!-- $Given\ an\ integer\ S,\ find\ a\ modulus\ N\ such\ that\ for\ the\ messages \{m{_1}, m{_2}, m{_3}\} and public exponents \{e{_1}, e{_2}, e{_3}\}, we have: $ -->
+<!-- $$Given\ an\ integer\ S,\ find\ a\ modulus\ N\ such\ that\ for\ the\ messages \{m{_1}, m{_2}, m{_3}\} and public exponents \{e{_1}, e{_2}, e{_3}\}, we have: $$ -->
 
-$\text{Given an integer }S,\ \text{find a modulus }N\ \text{such that for the messages } \{m{_1}, m{_2}, m{_3}, ... m{_n}\}\\\ \text{we can compute in polynomial time the public exponents } \{e{_1}, e{_2}, e{_3}, ... e{_n}\}\ \text{such that:}\\ S^{e{_i}} \equiv m{_i} \mod N$.
+$$\text{Given an integer }S,\ \text{find a modulus }N\ \text{such that for the messages } \{m{_1}, m{_2}, m{_3}, ... m{_n}\}\\\ \text{we can compute in polynomial time the public exponents } \{e{_1}, e{_2}, e{_3}, ... e{_n}\}\ \text{such that:}\\ S^{e{_i}} \equiv m{_i} \mod N$$
 
 Notice that:
-$e{_i} = log_{S}(m{_i})\ mod\ N$
+$$e{_i} = log_{S}(m{_i})\ mod\ N$$
 
-This is actually the `discrete logarithm problem`. **Recall** that the discrete logarithm problem is the following: given $g, h, p$, find $x$ such that $g^{x} \equiv h\ mod\ p$. It's basically `a logarithm in a finite field`.
+This is actually the `discrete logarithm problem`. **Recall** that the discrete logarithm problem is the following: given $$g, h, p$$, find $$x$$ such that $$g^{x} \equiv h\ mod\ p$$. It's basically `a logarithm in a finite field`.
 
-So, the plan is to find a number $N$ such that we can easily compute any discrete logarithm with the base $S$. The discrete logarithm problem is known to be a hard problem in general and there **isn't** a known polynomial time algorithm to solve it. However, there are some cases where it can be solved in feasible time. For starters, we can take a look at the [Algorithms chapter on the Wikipedia page of DLP](https://en.wikipedia.org/wiki/Discrete_logarithm#Algorithms). 
+So, the plan is to find a number $$N$$ such that we can easily compute any discrete logarithm with the base $$S$$. The discrete logarithm problem is known to be a hard problem in general and there **isn't** a known polynomial time algorithm to solve it. However, there are some cases where it can be solved in feasible time. For starters, we can take a look at the [Algorithms chapter on the Wikipedia page of DLP](https://en.wikipedia.org/wiki/Discrete_logarithm#Algorithms). 
 
 ### Pohlig-Hellman algorithm
 
@@ -96,20 +96,20 @@ More specifically, we can take a look at the `Pohlig-Hellman` algorithm. It atte
 - An n-smooth number is a number that has only prime factors less than or equal to n.
 - The order of a group is the number of elements in the group.
 
-In our case, the `finite abelian group` is actually the `multiplicative group of integers modulo N`. The order of this group is $\phi(N)$, where $\phi$ is Euler's totient function.
+In our case, the `finite abelian group` is actually the `multiplicative group of integers modulo N`. The order of this group is $$\phi(N)$$, where $$\phi$$ is Euler's totient function.
 
-`Pohlig-Hellman's` algorithm works by breaking the `DLP` into subgroups of prime order. It solves the `DLP` in each subgroup and then combines the results using the `Chinese Remainder Theorem`. In fact, if a group has order $p$, where $p$ is prime, it's order is $p-1$. If $p-1$ is sufficiently smooth, that is, it has small prime factors, then the `DLP` can be solved in efficient time. You can read more [here](https://www.hyperelliptic.org/tanja/teaching/crypto20/pohlig-hellman.pdf).
+`Pohlig-Hellman's` algorithm works by breaking the `DLP` into subgroups of prime order. It solves the `DLP` in each subgroup and then combines the results using the `Chinese Remainder Theorem`. In fact, if a group has order $$p$$, where $$p$$ is prime, it's order is $$p-1$$. If $$p-1$$ is sufficiently smooth, that is, it has small prime factors, then the `DLP` can be solved in efficient time. You can read more [here](https://www.hyperelliptic.org/tanja/teaching/crypto20/pohlig-hellman.pdf).
 
 
 ### Solving the challenge
 
 Taking everything into consideration, we _almost_ have a solution. There are 2 obstacles left:
-- this check: `if isPrime(pubkey): return {"error": "Everyone knows RSA keys are not primes..."}`. We can't have a prime modulus. To circumvent this, we can simply choose n to be $p^{2}$, where $p$ is a prime and $p-1$ is sufficiently smooth. Thus, the order of the group will be $p(p-1)$, which is sufficiently smooth if divided into subgroups.
-- even if we manage to choose an $N$ that makes solving the `DLP` feasible, we still need to make sure that the base we are trying to solve for is a generator of the group. In other words, $signature$ is a **primitive root** modulo $N$. If it's not, the `DLP` has no solution.
+- this check: `if isPrime(pubkey): return {"error": "Everyone knows RSA keys are not primes..."}`. We can't have a prime modulus. To circumvent this, we can simply choose n to be $$p^{2}$$, where $$p$$ is a prime and $$p-1$$ is sufficiently smooth. Thus, the order of the group will be $$p(p-1)$$, which is sufficiently smooth if divided into subgroups.
+- even if we manage to choose an $$N$$ that makes solving the `DLP` feasible, we still need to make sure that the base we are trying to solve for is a generator of the group. In other words, $$signature$$ is a **primitive root** modulo $$N$$. If it's not, the `DLP` has no solution.
 
 ### Implementation
 
-Generate a prime $p$ such that $p-1$ is smooth enough:
+Generate a prime $$p$$ such that $$p-1$$ is smooth enough:
 
 ```python
 def generate_smooth_prime(min_bound, signature=SIGNATURE):
@@ -146,7 +146,6 @@ for (i, msg_digest) in enumerate(msgs_digest):
 Here is the full exploit script written in `SageMath`:
 
 ```python
-from curses.ascii import SI
 from sage.all import *
 from Pwn4Sage import remote
 from pkcs1 import emsa_pkcs1_v15
