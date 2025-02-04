@@ -1,0 +1,381 @@
+---
+layout: post
+title:  "Isn't -0 == 0? asked the v8 engine"
+date:   2025-02-02 13:33:37 +0000
+categories: research
+description: "Researching and exploiting bug 1126249 in v8"
+---
+
+# Prologue
+
+Hello **wanderer**!
+In this blog post I explore an interesting bug in the v8 javascript engine that was reported [here](https://issues.chromium.org/issues/40053301). While it's report is _obscure_ to say the least, as it was discovered by fuzzing, I try to dive into the [commit](https://github.com/v8/v8/commit/e371325bcb03f20a362ebfa48225159702c6fde7) that fixed it, why/how it works and, in the end, how to exploit it. 
+
+Before we get our hands dirty, I must inform you that I'm writing this post as a learning experience for myself aswell. I'm certainly not a v8 _magician_, but this is my attempt at grasping it's **huge** codebase.
+
+![meme_lookingup](/img/v8negative0/lookigup.jpg)
+
+# Our lead
+
+So what are we investigating here? On *14th september 2020*, the following commit made it's way into the v8 repo:
+
+<div style="background-color: #0d1117; color: #c9d1d9; font-family: Arial, sans-serif; padding: 16px; border-radius: 6px; width: 100%; border: 1px solid #30363d;">
+    <div style="font-weight: bold; color: #58a6ff;">[compiler] Fix bug in SimplifiedLowering's overflow computation</div>
+    <p style="font-size: 14px; color: #8b949e; margin-top: 8px;">
+        It's unsound to ignore -0 inputs:<br>
+        -0 - INT32_MIN is outside of INT32 range.
+    </p>
+    <p style="font-size: 14px; color: #8b949e; margin-top: 8px;">
+        <strong>Bug:</strong> chromium:1126249<br>
+        <strong>Change-Id:</strong> Ib39f1c61201705780acb0359975329aa2ca34d1<br>
+        <strong>Reviewed-on:</strong> <a href="https://chromium-review.googlesource.com/c/v8/v8/+/2404452" style="color: #58a6ff; text-decoration: none;">https://chromium-review.googlesource.com/c/v8/v8/+/2404452</a><br>
+        <strong>Reviewed-by:</strong> Tobias Tebbi &lt;tebbi@chromium.org&gt;<br>
+        <strong>Commit-Queue:</strong> Georg Neis &lt;neis@chromium.org&gt;<br>
+        <strong>Cr-Commit-Position:</strong> refs/heads/master@{#69877}
+    </p>
+    <hr style="border: 1px solid #30363d;">
+    <p style="font-size: 14px; color: #8b949e;">
+        <strong>main</strong><br>
+        <span style="color: #58a6ff;">13.4.6974065</span> <span style="color: #8b949e;">→</span> 8.7.86
+    </p>
+    <div style="background-color: #161b22; padding: 12px; border-radius: 6px; margin-top: 10px; display: flex; align-items: center;">
+        <div style="width: 24px; height: 24px; background-color: #ff7b72; border-radius: 50%; margin-right: 10px;"></div>
+        <p style="font-size: 14px; color: #c9d1d9; margin: 0;">
+            <strong>GeorgNeis</strong> authored and <strong>Commit Bot</strong> committed on Sep 14, 2020
+        </p>
+    </div>
+</div>
+
+It made these changes to the code:
+
+<div style="background-color: #0d1117; color: #c9d1d9; font-family: 'Courier New', monospace; padding: 16px; border-radius: 6px; width: 100%; border: 1px solid #30363d; display: inline-block">
+    <div style="background-color: #161b22; padding: 8px; font-size: 14px; color: #8b949e;">
+        <span style="color: #58a6ff;">src/compiler/simplified-lowering.cc</span>
+    </div>
+    <pre style="font-size: 14px; margin: 0px; line-height: 0.65; padding: 3px 0px;">
+
+<span style="height: 1px; color: #8b949e; margin: 0">@@ -183,10 +183,16 @@ void ReplaceEffectControlUses(Node* node, Node* effect, Node* control) {</span>
+
+<!-- Red Block: Removed Code -->
+<div style="background-color: #490202; color: #f85149; padding: 4px 8px; margin: 0; display: block;">
+- <span style="color: #ff7b72;">bool</span> CanOverflowSigned32(<span style="color: #d2a8ff;">const Operator*</span> op, <span style="color: #d2a8ff;">Type</span> left, <span style="color: #d2a8ff;">Type</span> right,<br>
+-                        <span style="color: #d2a8ff;">Zone*</span> type_zone) {<br>
+-   <span style="color: #8b949e;">// We assume the inputs are checked Signed32</span><br>
+-   <span style="color: #8b949e;">// to be Signed32. Technically, the inputs could also be minus zero.</span>
+</div>
+
+<!-- Green Block: Added Code (Touching the Red Block) -->
+<div style="background-color: #033a16; color: #3fb950; padding: 4px 8px; margin: 0; display: block;">
++ <span style="color: #d2a8ff;">TypeCache const*</span> type_cache, <span style="color: #d2a8ff;">Zone*</span> type_zone) {<br>
++   <span style="color: #8b949e;">// We assume the inputs are checked Signed32</span><br>
++   <span style="color: #8b949e;">// They could also be minus zero, which we treat as 0.</span><br>
++   <span style="color: #ff7b72;">if</span> (left.Maybe(<span style="color: #d2a8ff;">Type::MinusZero</span>())) {<br>
++       left = Type::Union(left, type_cache->SingletonZero, type_zone);<br>
++   }<br>
++   <span style="color: #ff7b72;">if</span> (right.Maybe(<span style="color: #d2a8ff;">Type::MinusZero</span>())) {<br>
++       right = Type::Union(right, type_cache->SingletonZero, type_zone);<br>
++   }
+</div>
+
+<span style="color: #8b949e;">@@ -1484,7 +1490,8 @@ class RepresentationSelector {</span>
+
+<!-- Red Block: Removed Code -->
+<div style="background-color: #490202; color: #f85149; padding: 4px 8px; margin: 0; display: block;">
+- <span style="color: #ff7b72;">if</span> (!CanOverflowSigned32(node->op(), left_feedback_type,<br>
+-       right_feedback_type, graph_zone())) {
+</div>
+
+<!-- Green Block: Added Code (Touching the Red Block) -->
+<div style="background-color: #033a16; color: #3fb950; padding: 4px 8px; margin: 0; display: block;">
++ <span style="color: #ff7b72;">if</span> (!CanOverflowSigned32(node->op(), left_feedback_type,<br>
++       right_feedback_type, type_cache_, graph_zone())) {
+</div>
+
+        ChangeToPureOp(node, Int32Op(node));
+    </pre>
+</div>
+
+
+Ok, so what's going on here? To understand the changes and their impact, let's make an incursion into the compiler pipeline.
+
+# The compiler pipeline(overview)
+
+<div style="background-color: #161b22; border-left: 4px solid #58a6ff; padding: 12px; font-size: 16px; color: #c9d1d9; font-family: 'Arial', sans-serif; border-radius: 6px; width: 100%; margin-top: 20px; margin-bottom: 20px;">
+    <strong style="color: #58a6ff;">💡 Note:</strong> This is only a high-level overview meant as a refresher. Please refer to these great articles to learn more about v8 and, more specifically, TurboFan.
+    <ul style="list-style: none; padding: 0; margin: 0;">
+        <li style="margin-top: 6px;">
+            🔗 <a href="https://doar-e.github.io/blog/2019/01/28/introduction-to-turbofan/" target="_blank" style="color: #58a6ff; text-decoration: none;">Introduction to TurboFan</a>
+        </li>
+        <li style="margin-bottom: 6px; margin-top: 6px;">
+            🔗 <a href="https://jhalon.github.io/chrome-browser-exploitation-1/" target="_blank" style="color: #58a6ff; text-decoration: none;">Chrome Browser Exploitation part 1</a>
+        </li>
+        <li style="margin-bottom: 6px; margin-top: 6px;">
+            🔗 <a href="https://jhalon.github.io/chrome-browser-exploitation-2/" target="_blank" style="color: #58a6ff; text-decoration: none;">Chrome Browser Exploitation part 2</a>
+        </li>
+    </ul>
+</div>
+
+What happens when you code a cute weather app for homework and run it in your browser? Well, the image bellow shows an overview of the different stages your code goes through.
+
+![compiler_pipeline](/img/v8negative0/pipeline.png)
+
+**Firstly**, your code is parsed and transformed into an Abstract Syntax Tree (AST). This `IR`(intermidiate representation) is used by `Ignition`, a fast low-level register-based interpreter to generate **architecture agnostic** bytecode. It then procees to run/interpret this Ignition specific bytecode. This is cool and all, but we want to go **faster**!
+
+When a function is called many times, it is marked as _hot_ and `TurboFan` kicks in(just like in a real engine). This is the **Just-In-Time** compilation part of v8. You see, `TurboFan` compiles the function into **architecture dependent machine** code(like x86 or arm), thus speeding up the execution by a *lot*. When `Ignition` runs and interprets bytecode, it also collects various feedback information that will later be used by `TurboFan` to better optimize the code.  
+
+If you inspect the pipeline a second time, you'll notice a green and a red arrow. The green one represents bytecode `optimization`(JITing) and the red one `deoptimization`. You may be wondering: why would we ever want to deoptimize our **very** optimized machine code generated by `TurboFan` and turn back to the _slow_ `Ignition`? The answer lies in javascript's nature. Javascript is a dynamic language, meaning that types can change at runtime. You can probably guess how this is a fair problem for a compiler that generates static machine code. We don't want thousands of instructions that check for an object's type at runtime. So, how do we handle all of these tpyes? **We don't**. `TurboFan` navigates itself through **speculations**. Based on collected feedback, it makes assumptions about what type every object will have. If you run the function `add2numbers(a, b)` 1000 times, you'll probably guess what types `a` and `b` will have at the 1001st call. So, if you **speculate** things become a hell of a lot easier. Translating an addition into machine code is trivial if you know that `a` and `b` are of type `Signed32` for example.
+
+But what happens if `a` and `b` are Strings at 1002nd call? The function gets deoptimized and execution is resumed at `Ignition` level. `TurboFan` makes sure of this by inserting so-called `type guards` that abort or deffer execution if the speculation is wrong.
+
+Perhaps the main part of `TurboFan` is it's capability to optimize code to the max. It does so by using an Intermediate Representation called **Sea of Nodes**, which is basically a control flow graph combined with a data flow graph. This graph is the starting point for it's optimizations. The bug that we are investigating today is actually within one of those passes.
+
+# TurboFan optimization phases
+
+For the sake of simplicity, let's dive straight intro an example. Suppose we have the following javascript code:
+
+```javascript
+function add(x, y) {
+    let p = 1;
+    if (y == true) {
+        p = 1337;
+    }
+    p *= 2;
+    return x + p;
+}
+```
+Nothing fancy here. Now let's heat this function up! We have 2 ways of doing this. We can either call this function in a loop many times or use 2 native `d8` function(meant for testing purposes).
+
+```javascript
+for (let i = 0; i < 10000; i++) {
+    add(1, true);
+}
+// or
+%PrepareFunctionForOptimization(add);
+add(1, true);
+%OptimizeFunctionOnNextCall(add);
+add(1, true);
+```
+
+`d8` provides a couple cool flags to help you trace `TurboFan` optimizations and dump the `Sea of Nodes` graph:
+- `--trace-turbo` will create a json file that you can visualize on [Turbolizer](https://v8.github.io/tools/head/turbolizer/index.html)
+- `--trace-opt`/`--trace-deopt` will print out when code is optimized/deoptimized
+
+Let's plug the json file generated into Turbolizer!
+
+<div style="background-color: #161b22; border-left: 4px solid #58a6ff; padding: 12px; font-size: 16px; color: #c9d1d9; font-family: 'Arial', sans-serif; border-radius: 6px; width: 100%; margin-top: 20px; margin-bottom: 20px;">
+    <strong style="color: #58a6ff;">💡 Note:</strong> Turbolizer will initially display only control nodes. Click on the little arrows beneath code lines(on the left side) to reveal other nodes.
+</div>
+
+**Firstly**, let's have a look at a completely unoptimized `Sea of Nodes`. There are three types of edges in this type of IR:
+- **Control edges** - represent control flow
+- **Data flow edges** - represent data dependencies
+- **Effect edges** - esentially mark orders that certain nodes must be executed in.
+
+Again, if you're not familiar with this, I strongly recommend reading the `Introduction to TurboFan` article linked above.
+
+![bytecodebuilder](/img/v8negative0/bytecodebuilder1.png)
+
+Notice the `SpeculativeSafeIntegerAdd` and `SpeculativeNumberMultiply` nodes in the graph. As you might have guessed, they are associated with the `+` and `*` operations in our function. **Why are they prefixed with SpeculativeSafe?**. `TurboFan` makes assumptions about the types the inputs of these nodes will have. It learns that when you call `add`, x will most likely be an integer and y a boolean. It speculates but it also guards these assumptions. If at some point, the speculation is wrong, we deoptimize and return to `Ignition` interpreted bytecode.
+
+<div style="background-color: #161b22; border-left: 4px solid #58a6ff; padding: 12px; font-size: 16px; color: #c9d1d9; font-family: 'Arial', sans-serif; border-radius: 6px; width: 100%; margin-top: 20px; margin-bottom: 20px;">
+    <strong style="color: #58a6ff;">📚 Recall:</strong> If a variable is assigned different values based on different control flow paths, a Phi node is used to merge them.
+</div>
+
+One step at a time, let's start optimizing this graph. Peeking a little bit at the code, `PipelineImpl::OptimizeGraph` in `src/compiler/pipeline.cc` is tasked with running all the optimization passes.
+
+```cpp
+bool PipelineImpl::OptimizeGraph(Linkage* linkage) {
+  PipelineData* data = this->data_;
+  data->BeginPhaseKind("V8.TFLowering");
+  // Type the graph and keep the Typer running such that new nodes get
+  // automatically typed when they are created.
+  Run<TyperPhase>(data->CreateTyper());
+  ...
+  Run<TypedLoweringPhase>();
+  ...
+  Run<SimplifiedLoweringPhase>(linkage);
+  ...
+```
+
+## The typer phase
+
+The `TyperPhase` is responsible for typing the graph. It's main goal is to infer types for nodes that don't have any. This is crucial and is the first step towards figuring out what optimizations to perform. If we take a look at `Typer::Run` in `src/compiler/typer.cc`, we see that it creates a `GraphReducer` object that is basically responsible for traversing the graph and applying different reducers. In this case, only the `Visitor` reducer is loaded. Then, there is a for loop that calls `ReduceNode` on each root and finally `ReduceGraph`. `ReduceGraph` is only `ReduceNode` called on the graph's `end`.
+
+```cpp
+void Typer::Run(const NodeVector& roots,
+                LoopVariableOptimizer* induction_vars) {
+  if (induction_vars != nullptr) {
+    induction_vars->ChangeToInductionVariablePhis();
+  }
+  Visitor visitor(this, induction_vars);
+  GraphReducer graph_reducer(zone(), graph(), tick_counter_, broker());
+  graph_reducer.AddReducer(&visitor);
+  for (Node* const root : roots) graph_reducer.ReduceNode(root);
+  graph_reducer.ReduceGraph();
+
+  if (induction_vars != nullptr) {
+    // Validate the types computed by TypeInductionVariablePhi.
+    for (auto entry : induction_vars->induction_variables()) {
+      InductionVariable* induction_var = entry.second;
+      if (induction_var->phi()->opcode() == IrOpcode::kInductionVariablePhi) {
+        CHECK(visitor.InductionVariablePhiTypeIsPrefixedPoint(induction_var));
+      }
+    }
+
+    induction_vars->ChangeToPhisAndInsertGuards();
+  }
+}
+```
+
+`src/compiler/graph-reducer.cc` - `GraphReducer::ReduceNode` is a function that implements a graph traversal algorithm based on a stack and a revisit queue. It's main purpose is to apply all reducers to a node and it's children and handle cases where stuff needs to be revisited. Think of it like this, if a node is changed, it's neighbours might need to be reevaluated.
+
+```cpp
+oid GraphReducer::ReduceNode(Node* node) {
+  DCHECK(stack_.empty());
+  DCHECK(revisit_.empty());
+  Push(node);
+  for (;;) {
+    if (!stack_.empty()) {
+      // Process the node on the top of the stack, potentially pushing more or
+      // popping the node off the stack.
+      ReduceTop();
+    } else if (!revisit_.empty()) {
+      // If the stack becomes empty, revisit any nodes in the revisit queue.
+      Node* const node = revisit_.front();
+      revisit_.pop();
+      if (state_.Get(node) == State::kRevisit) {
+        // state can change while in queue.
+        Push(node);
+      }
+    } else {
+      // Run all finalizers.
+      for (Reducer* const reducer : reducers_) reducer->Finalize();
+
+      // Check if we have new nodes to revisit.
+      if (revisit_.empty()) break;
+    }
+  }
+  DCHECK(revisit_.empty());
+  DCHECK(stack_.empty());
+}
+```
+
+Diving deeper, stuff gets done in `ReduceTop`. First things first, it needs to figure if the inputs of a graph need to be visited too and if so, recurses through them so that no node is evaluated before it's ascendants.
+
+```cpp
+  NodeState& entry = stack_.top();
+  Node* node = entry.node;
+  DCHECK_EQ(State::kOnStack, state_.Get(node));
+
+  if (node->IsDead()) return Pop();  // Node was killed while on stack.
+
+  Node::Inputs node_inputs = node->inputs();
+
+  // Recurse on an input if necessary.
+  int start = entry.input_index < node_inputs.count() ? entry.input_index : 0;
+  for (int i = start; i < node_inputs.count(); ++i) {
+    Node* input = node_inputs[i];
+    if (input != node && Recurse(input)) {
+      entry.input_index = i + 1;
+      return;
+    }
+  }
+  for (int i = 0; i < start; ++i) {
+    Node* input = node_inputs[i];
+    if (input != node && Recurse(input)) {
+      entry.input_index = i + 1;
+      return;
+    }
+  }
+```
+
+Here, `entry.input_index` keeps track of the last input that was processed for a specific node. The `Recurse` function checks if a node is `unvisited` or needs to be `revisited`, and if so, pushes it onto the stack. There are 2 for loops because for every node, we want to resume processing from the where we left of. Let's say an addition node has 2 inputs, `a` and `b`. If `a` is processed first and it is unvisited, we immediately jump to processing it(hence the return and pushing it onto the stack in Recurse). When we finally reach the addition node again, we want to resume processing from `b`. The second for loop covers for nodes that may need to be revisited after all this.
+
+Then: 
+
+```cpp
+  // All inputs should be visited or on stack. Apply reductions to node.
+  Reduction reduction = Reduce(node);
+```
+
+The `Reduce` function is just a middleman, you can check it out by yourself, but what it does is: `Reduction reduction = (*i)->Reduce(node, observe_node_manager_);` where i is a pointer to a reducer we added earlier(Visitor in this case). Here, there are 2 types of outcomes: (1) a node is replaced with another type of node after reduction or (2) a node is just updated or has some parameters changed. It's pretty obvious that updating a node should require some revisiting.
+
+Either way, the actual magic happens in the reduce methods of each reducer. In `src/compiler/typer.cc`, the `Reduce` method calls `TypeNode`, which is a big **switch** statement for different types of nodes:
+
+```cpp
+  Type TypeNode(Node* node) {
+    switch (node->opcode()) {
+    [...]
+#define DECLARE_BINARY_CASE(x, ...) \
+  case IrOpcode::k##x:              \
+    return Type##x(Operand(node, 0), Operand(node, 1));
+      JS_SIMPLE_BINOP_LIST(DECLARE_BINARY_CASE)
+      SIMPLIFIED_NUMBER_BINOP_LIST(DECLARE_BINARY_CASE)
+      SIMPLIFIED_BIGINT_BINOP_LIST(DECLARE_BINARY_CASE)
+      SIMPLIFIED_SPECULATIVE_NUMBER_BINOP_LIST(DECLARE_BINARY_CASE)
+      SIMPLIFIED_SPECULATIVE_BIGINT_BINOP_LIST(DECLARE_BINARY_CASE)
+#undef DECLARE_BINARY_CASE
+    [...]
+  }
+```
+
+Notice the implementation with macros, it's a common pattern in this codebase. For demonstration purposes, let's follow the case that matches `SpeculativeSafeIntegerAdd`. It resolves to calling `OperationTyper::SpeculativeSageIntegerAdd` which calls `NumberAdd`, both in `src/compiler/operation-typer.cc`:
+
+```cpp
+Type OperationTyper::SpeculativeSafeIntegerAdd(Type lhs, Type rhs) {
+  Type result = SpeculativeNumberAdd(lhs, rhs);
+  // If we have a Smi or Int32 feedback, the representation selection will
+  // either truncate or it will check the inputs (i.e., deopt if not int32).
+  // In either case the result will be in the safe integer range, so we
+  // can bake in the type here. This needs to be in sync with
+  // SimplifiedLowering::VisitSpeculativeAdditiveOp.
+  return Type::Intersect(result, cache_->kSafeIntegerOrMinusZero, zone());
+}
+```
+```cpp
+Type OperationTyper::NumberAdd(Type lhs, Type rhs) {
+  [...]
+  // We can give more precise types for integers.
+  Type type = Type::None();
+  lhs = Type::Intersect(lhs, Type::PlainNumber(), zone());
+  rhs = Type::Intersect(rhs, Type::PlainNumber(), zone());
+  if (!lhs.IsNone() && !rhs.IsNone()) {
+    if (lhs.Is(cache_->kInteger) && rhs.Is(cache_->kInteger)) {
+      type = AddRanger(lhs.Min(), lhs.Max(), rhs.Min(), rhs.Max());
+    } else {
+      if ((lhs.Maybe(minus_infinity_) && rhs.Maybe(infinity_)) ||
+          (rhs.Maybe(minus_infinity_) && lhs.Maybe(infinity_))) {
+        maybe_nan = true;
+      }
+      type = Type::PlainNumber();
+    }
+  }
+
+  // Take into account the -0 and NaN information computed earlier.
+  if (maybe_minuszero) type = Type::Union(type, Type::MinusZero(), zone());
+  if (maybe_nan) type = Type::Union(type, Type::NaN(), zone());
+  return type;
+}
+```
+
+<div style="background-color: #161b22; border-left: 4px solid #58a6ff; padding: 12px; font-size: 16px; color: #c9d1d9; font-family: 'Arial', sans-serif; border-radius: 6px; width: 100%; margin-top: 20px; margin-bottom: 20px;">
+    <strong style="color: #58a6ff;">💡 Note:</strong> I found TurboFan's typing system very cleverly implemented. Each type is, in essence, a bitset where each bit represents a subtype. This way, we can define more general types as reunions of base ones. For example: 
+    <li style="margin: 6px;">Number = Signed32 \/ Unsigned32 \/ Double</li>
+    <li style="margin: 6px;">Smi(small integer) <= Signed32</li>
+    It now becomes easy to define a few checks on these types:
+    <li style="margin: 6px;">this.Is(that) - checks if this is a subset of that</li>
+    <li style="margin: 6px;">this.Maybe(that) - checks if this overlaps with that</li>
+    And operations like `Intesection` and `Union` of 2 types.
+    You can learn more about this in src/compiler/types.h as it has a very descriptive comment about all this.
+</div>
+
+
+I cut out a few parts of the function(I encourage you to check it out yourself), but in essence it handles the different types of outcomes an addition operation can have. For example, it checks if any input is `NaN` or `MinusZero` and updates the addition's result type accordingly. Interesting enough is the `AddRanger` function that gets called if of the inputs are an integer. `AddRanger` assigns to a node a `Range` that it's output can have. For example, what would pe the range of the addition operation here: `x = 1; if (y == true) x = 1337; return x+1;`? It would be `[2, 1338]`. Pretty straight forward, right?
+
+![typer1](/img/v8negative0/typerphase1.png)
+
+Would you look at that? Our operations from the hot function we defined earlier have been typed. But wait, there's more! These type of nodes are still not enough to lower the operations into machine code.
+
+## The typed lowering phase
+
+
