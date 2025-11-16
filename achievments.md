@@ -8,6 +8,9 @@ Some contests and CTFs I scored decently in🤔
 
 More can be seen on [**The Few Chosen**](https://ctftime.org/team/140885/) !
 
+### 2025
+- TO BE UPDATED...
+
 ### 2024
 - 🥇UNbreakable 2024 individual - 1st place
 - 🥈ROCSC 2024 Quals - 2nd place
