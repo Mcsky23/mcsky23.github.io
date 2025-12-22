@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "piano - UAF in QuickJS @ HKCERT 2025 Quals"
-date:   2025-12-22 11:00:00 +0000
+date:   2025-12-22 00:00:00 +0000
 categories: writeups
 description: "Exploiting a custom CTF patch in QuickJS to achieve RCE(and a flag)"
 ---
