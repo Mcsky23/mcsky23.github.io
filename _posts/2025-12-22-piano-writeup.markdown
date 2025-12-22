@@ -6,12 +6,12 @@ categories: writeups
 description: "Exploiting a custom CTF patch in QuickJS to achieve RCE(and a flag)"
 ---
 
-# Epilogue
+## Epilogue
 
 ![minipif](/img/piano-writeup/piano_pif.png)
 that's all he had to say🥀
 
-# Bug overview
+## Bug overview
 
 This challenge provides us with a custom patch to [QuickJS](https://github.com/bellard/quickjs), a lightweight JavaScript engine written by [Fabrice Bellard](https://bellard.org/) himself(author of QEMU among other things). 
 
@@ -85,7 +85,7 @@ try {
 
 Now, arr1 is freed on the heap, but we still have a reference to it accessible from JS.
 
-# Exploitation
+## Exploitation
 
 With the use-after-free primitive, we can now proceed to exploitation. Our target is to allocate other objects on top of the chunk of memory previously occupied by arr1, enabling us to reference them via the dangling pointer.
 
@@ -175,7 +175,7 @@ case JS_CFUNC_generic:
 
 Everything here is under our control, so we can set `func.generic` to point to `system` in libc and set the first argument to `/bin/sh`!
 
-# Full exploit code
+## Full exploit code
 
 ```javascript
 Object.defineProperty(globalThis, "x", {
@@ -353,7 +353,7 @@ static JSValue js_debug_print_addr(JSContext *ctx, JSValueConst this_val,
 }
 ```
 
-# Prologue
+## Prologue
 
 So that's about it! Hope you enjoyed the writeup as much as I enjoyed solving the challenge and learning about how QuickJS works. See you in the next one!
 
