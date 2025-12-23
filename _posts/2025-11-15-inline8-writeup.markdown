@@ -9,10 +9,15 @@ description: "Finding and exploiting a type-confusion in the jsish javascript en
 ## Information
 
 CVE: CVE-2025-65570
+
 Product: jsish (pcmacdon)
+
 Affected versions: 2.0
+
 Component: src/jsEval.c
+
 Issue: Type Confusion (CWE-843)
+
 Impact: Potential arbitrary code execution / memory corruption when processing attacker-controlled JavaScript.
 
 ## Epilogue
