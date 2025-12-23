@@ -6,6 +6,15 @@ categories: writeups
 description: "Finding and exploiting a type-confusion in the jsish javascript engine used in the inline8 challenge at DCTF Finals 2025."
 ---
 
+## Information
+
+CVE: CVE-2025-65570
+Product: jsish (pcmacdon)
+Affected versions: 2.0
+Component: src/jsEval.c
+Issue: Type Confusion (CWE-843)
+Impact: Potential arbitrary code execution / memory corruption when processing attacker-controlled JavaScript.
+
 ## Epilogue
 
 With DefCamp's DCTF Finals 2025 behind us, I want to share my intended solution for the inline8(revenge) challenge which I authored for the competition. Sadly, no team managed to solve it during the event but some got very close and, interestingly enough, using other paths(goes to show the _abandoned_ state of the random project I chose😭). Now to be fair, when I was working on the challenge I knew people might find other exploits as the project hadn't been updated in a couple years and it already had a few open issues on GitHub(none of which could be exploited for RCE but still). 
