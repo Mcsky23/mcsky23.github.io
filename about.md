@@ -15,6 +15,7 @@ CTF player @ [**The Few Chosen**](https://ctftime.org/team/140885/).
 ---
 
 Some of my work:
+- [CVE-2026-5946](https://nvd.nist.gov/vuln/detail/CVE-2026-5946)
 - [CVE-2026-3591](https://nvd.nist.gov/vuln/detail/CVE-2026-3591)
 - [CVE-2026-25897](https://nvd.nist.gov/vuln/detail/CVE-2026-25897)
 - [CVE-2026-25797](https://nvd.nist.gov/vuln/detail/CVE-2026-25797)
